@@ -16,9 +16,15 @@ _client = None
 
 def is_demo() -> bool:
     """サイドバーにデモモードのスイッチを表示し、その状態を返す。各ページで1回だけ呼ぶ。"""
-    if "demo" not in st.session_state:
-        st.session_state.demo = not os.environ.get("ANTHROPIC_API_KEY")
-    return st.sidebar.toggle("デモモード（サンプル結果を表示）", key="demo")
+    label = "デモモード（サンプル結果を表示）"
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        st.sidebar.toggle(label, value=True, disabled=True, help="APIキー未設定のためデモモード固定です")
+        return True
+    # ウィジェットの key に保存するとページ移動で消えるため、別の変数に保持する
+    if "_demo" not in st.session_state:
+        st.session_state._demo = False
+    st.session_state._demo = st.sidebar.toggle(label, value=st.session_state._demo)
+    return st.session_state._demo
 
 
 def _get_client() -> anthropic.Anthropic:
