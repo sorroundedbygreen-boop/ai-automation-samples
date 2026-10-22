@@ -18,7 +18,8 @@ def is_demo() -> bool:
     """サイドバーにデモモードのスイッチを表示し、その状態を返す。各ページで1回だけ呼ぶ。"""
     label = "デモモード（サンプル結果を表示）"
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        st.sidebar.toggle(label, value=True, disabled=True, help="APIキー未設定のためデモモード固定です")
+        st.sidebar.markdown('<span class="tag" style="background:rgba(20,184,166,.18)">● デモモードで表示中</span>',
+                            unsafe_allow_html=True)
         return True
     # ウィジェットの key に保存するとページ移動で消えるため、別の変数に保持する
     if "_demo" not in st.session_state:
