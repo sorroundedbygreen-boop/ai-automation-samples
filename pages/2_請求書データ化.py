@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from common.llm import ask, is_demo
+from common.ui import hero, section, setup
 
 SAMPLE_DIR = Path(__file__).parent.parent / "data" / "invoices"
 
@@ -98,9 +99,11 @@ def check(r: dict) -> list[str]:
     return warnings
 
 
+setup("請求書データ化")
 DEMO = is_demo()
-st.title("② 請求書データ化")
-st.caption("PDF・画像・テキストの請求書から項目を抽出 → 検算 → インボイス要件チェック → Excel出力")
+hero("DEMO 02 · 経理", "請求書データ化",
+     "PDF・画像・テキストの請求書から項目を読み取り、<b>金額の検算</b>と<b>インボイス要件チェック</b>を行ってExcelに出力します。",
+     ['PDF / 画像読み取り', '構造化出力', 'プログラム検算', 'Excel出力'])
 
 files = [(f.name, f.getvalue()) for f in st.file_uploader(
     "請求書をアップロード（複数可）", type=["pdf", "png", "jpg", "jpeg", "webp", "txt"], accept_multiple_files=True) or []]

@@ -10,6 +10,7 @@ from pathlib import Path
 import streamlit as st
 
 from common.llm import ask, is_demo
+from common.ui import hero, section, setup
 
 RULES_DIR = Path(__file__).parent.parent / "data" / "rules"
 TOP_K = 3
@@ -51,9 +52,11 @@ def search(question: str, chunks: list[dict]) -> list[dict]:
     return [c for score, c in scored[:TOP_K] if score > 0]
 
 
+setup("社内規程Q&Aボット")
 DEMO = is_demo()
-st.title("① 社内規程Q&Aボット")
-st.caption("就業規則・経費精算規程・情報セキュリティ規程を根拠に回答します（RAG）")
+hero("DEMO 01 · 総務・人事", "社内規程Q&Aボット",
+     "就業規則・経費精算規程・情報セキュリティ規程を検索し、<b>根拠の条文つき</b>で回答します。規程に書かれていないことは推測せず、担当部署へ案内します。",
+     ['RAG（検索拡張生成）', '出典の明示', 'ハルシネーション対策'])
 
 chunks = load_chunks()
 with st.expander(f"読み込んだ規程（{len(chunks)}条）"):

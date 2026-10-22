@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from common.llm import ask, is_demo
+from common.ui import hero, section, setup
 
 CSV_PATH = Path(__file__).parent.parent / "data" / "inquiries.csv"
 CATEGORIES = ["技術サポート", "請求・経理", "解約", "機能要望", "営業・見積", "その他"]
@@ -55,9 +56,11 @@ DEMO_RESULTS = {
         "小林様\n\nお問い合わせありがとうございます。弊社APIを利用したkintoneとの連携は可能です。\n具体的な連携方法と必要な設定について、確認のうえご案内いたします。"),
 }
 
+setup("問い合わせ自動仕分け")
 DEMO = is_demo()
-st.title("③ 問い合わせ自動仕分け")
-st.caption("問い合わせを AI が分類・優先度付けし、返信下書きまで自動作成")
+hero("DEMO 03 · カスタマーサポート", "問い合わせ自動仕分け",
+     "問い合わせを<b>種類・緊急度・感情</b>で分類し、上長対応が必要な案件を検出。返信の下書きまで自動で作成します。",
+     ['分類', '感情分析', 'エスカレーション判定', '返信下書き'])
 
 uploaded = st.file_uploader("問い合わせCSV（列: id, from, subject, body）", type="csv")
 df = pd.read_csv(uploaded if uploaded else CSV_PATH)
@@ -98,7 +101,7 @@ if (res := st.session_state.get("triage")) is not None:
                    width="stretch", hide_index=True)
     right.bar_chart(res.category.value_counts())
 
-    st.subheader("返信下書き（緊急度順）")
+    section("返信下書き（緊急度順）")
     for r in res.itertuples():
         badge = "🔴" if r.urgency == "高" else "🟡" if r.urgency == "中" else "🟢"
         with st.expander(f"{badge} [{r.category}] {r.subject} — {r.summary}" + ("　⚠️上長対応" if r.escalate else "")):
