@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from common.llm import ask, is_demo
-from common.ui import hero, note, section, setup
+from common.ui import customizable, GREEN, PRIORITY_COLORS, YELLOW, color_by, guide, hero, legend, note, section, setup
 
 SAMPLE = Path(__file__).parent.parent / "data" / "logistics" / "ヒアリングメモ_定例3.txt"
 PROCESSES = ["入荷", "保管", "ピッキング", "出荷", "在庫管理", "返品", "その他"]
@@ -144,9 +144,21 @@ hero("DEMO 04 · 物流・PMO", "物流 要件定義アシスタント",
      "<b>課題管理表</b>・<b>ベンダー確認事項（英語）</b>・<b>To-Be業務フロー図</b>をまとめて作成します。",
      ["要件定義", "As-Is / To-Be", "課題管理", "日英バイリンガル", "業務フロー図"])
 
-memo = st.text_area("ヒアリングメモ・議事メモ（そのまま貼り付けてOK）", SAMPLE.read_text(encoding="utf-8"), height=260)
+guide(
+    "物流センターの立ち上げなどのプロジェクトでは、現場の担当者に話を聞いたあと、その内容を"
+    "<b>議事録・やることリスト・システムへの要望一覧・業務の流れ図</b>にまとめる作業が大変です。"
+    "このツールは、打ち合わせのメモ（日本語と英語が混ざっていてもOK）を貼るだけで、"
+    "<b>それらの資料をまとめて自動で作ります</b>。海外メーカーへの確認事項は英語で作成します。",
+    [("メモを貼る", "打ち合わせのメモを下の欄に貼ります。試すだけなら架空のメモが入ったままでOK"),
+     ("「資料を作成する」を押す", "AIがメモを読み、要望・課題・決定事項を整理します"),
+     ("タブで切り替えて見る", "議事録／要件一覧／課題管理表／業務フロー図をタブで切り替えて確認"),
+     ("Excelで受け取る", "全部の資料を1つのExcelファイルにまとめてダウンロードできます")],
+    "要件一覧は優先度で色分けしています。赤＝必須（Must）、黄＝できれば（Should）、緑＝余裕があれば（Could）。",
+)
 
-if st.button("資料を作成する", type="primary"):
+memo = st.text_area("① 打ち合わせ・ヒアリングのメモ（そのまま貼り付けてOK）", SAMPLE.read_text(encoding="utf-8"), height=260)
+
+if st.button("② 資料を作成する", type="primary"):
     if DEMO:
         if memo.strip() != SAMPLE.read_text(encoding="utf-8").strip():
             st.warning("デモモードでは、サンプルのメモに対する結果を表示します。")
@@ -165,7 +177,8 @@ if r := st.session_state.get("req"):
     c3.metric("課題・宿題", f"{len(issues)}件")
     c4.metric("ベンダー確認", f"{len(r['vendor_questions_en'])}件")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["議事録（日・英）", "業務要件一覧", "課題管理表", "To-Be 業務フロー"])
+    section("③ 作成された資料（タブを押して切り替え）")
+    tab1, tab2, tab3, tab4 = st.tabs(["📝 議事録（日・英）", "📋 業務要件一覧", "✅ 課題管理表", "🔀 業務フロー図"])
     with tab1:
         ja, en = st.columns(2)
         with ja:
@@ -181,16 +194,24 @@ if r := st.session_state.get("req"):
             for q in r["vendor_questions_en"]:
                 st.markdown(f"- {q}")
     with tab2:
-        process = st.multiselect("工程で絞り込み", PROCESSES, default=[p for p in PROCESSES if p in set(reqs.process)])
-        st.dataframe(reqs[reqs.process.isin(process)].rename(columns={
+        process = st.multiselect("工程で絞り込み（×で外せます）", PROCESSES,
+                                 default=[p for p in PROCESSES if p in set(reqs.process)])
+        legend({"Must（必須）": PRIORITY_COLORS["Must"], "Should（できれば）": PRIORITY_COLORS["Should"],
+                "Could（余裕があれば）": PRIORITY_COLORS["Could"]})
+        shown = reqs[reqs.process.isin(process)].rename(columns={
             "id": "ID", "process": "工程", "as_is": "現状（As-Is）", "to_be": "あるべき姿（To-Be）",
-            "requirement": "システム要件", "priority": "優先度"}), width="stretch", hide_index=True)
+            "requirement": "システム要件", "priority": "優先度"})
+        st.dataframe(color_by(shown, "優先度", PRIORITY_COLORS), width="stretch", hide_index=True)
     with tab3:
-        st.dataframe(issues.rename(columns={"id": "ID", "issue": "課題・宿題", "owner": "担当", "due": "期限"}),
-                     width="stretch", hide_index=True)
+        legend({"担当・期限が決まっていない（要調整）": YELLOW, "担当・期限あり": GREEN})
+        shown = issues.rename(columns={"id": "ID", "issue": "課題・宿題", "owner": "担当", "due": "期限"})
+        shown["状態"] = ["要調整" if "要調整" in (o + d) else "決定" for o, d in zip(shown["担当"], shown["期限"])]
+        st.dataframe(color_by(shown, "状態", {"要調整": YELLOW, "決定": GREEN}), width="stretch", hide_index=True)
     with tab4:
         st.graphviz_chart(to_dot(r))
         st.markdown(" ".join(f'<span class="tag" style="background:{c};color:#334155">{l}</span>' for l, c in LANE_COLORS.items()), unsafe_allow_html=True)
+
+    customizable()
 
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
@@ -199,7 +220,7 @@ if r := st.session_state.get("req"):
         reqs.to_excel(writer, sheet_name="業務要件一覧", index=False)
         issues.to_excel(writer, sheet_name="課題管理表", index=False)
         pd.DataFrame({"Questions": r["vendor_questions_en"]}).to_excel(writer, sheet_name="Vendor Q&A", index=False)
-    st.download_button("Excelで一括ダウンロード", buf.getvalue(), "要件定義資料.xlsx",
+    st.download_button("④ Excelで一括ダウンロード", buf.getvalue(), "要件定義資料.xlsx",
                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 note("※ ヒアリングメモ・人物・数値はすべてデモ用に作成した架空のものです。")

@@ -5,11 +5,14 @@
 """
 from pathlib import Path
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
 from common.llm import ask, is_demo
-from common.ui import hero, section, setup
+from common.ui import customizable, URGENCY_COLORS, color_by, guide, hero, legend, section, setup
+
+CATEGORY_COLORS = ["#14B8A6", "#3B82F6", "#F43F5E", "#F59E0B", "#8B5CF6", "#94A3B8"]
 
 CSV_PATH = Path(__file__).parent.parent / "data" / "inquiries.csv"
 CATEGORIES = ["技術サポート", "請求・経理", "解約", "機能要望", "営業・見積", "その他"]
@@ -62,12 +65,24 @@ hero("DEMO 03 · カスタマーサポート", "問い合わせ自動仕分け",
      "問い合わせを<b>種類・緊急度・感情</b>で分類し、上長対応が必要な案件を検出。返信の下書きまで自動で作成します。",
      ['分類', '感情分析', 'エスカレーション判定', '返信下書き'])
 
-uploaded = st.file_uploader("問い合わせCSV（列: id, from, subject, body）", type="csv")
-df = pd.read_csv(uploaded if uploaded else CSV_PATH)
-st.write(f"{len(df)}件の問い合わせ" + ("" if uploaded else "（サンプル）"))
-st.dataframe(df[["from", "subject", "body"]], width="stretch", hide_index=True, height=200)
+guide(
+    "お客様からの問い合わせメールを読み込むと、AIが1件ずつ読んで<b>「何についての問い合わせか」「どれくらい急ぎか」"
+    "「お客様は怒っていないか」</b>を判定します。急ぎのものから順に並べ、<b>返信の下書き</b>まで作ります。"
+    "担当者は下書きを確認して送るだけになり、怒っているお客様の見落としも防げます。",
+    [("問い合わせを読み込む", "試すだけならそのままでOK（架空の問い合わせ8件が入っています）"),
+     ("「AIで仕分ける」を押す", "AIが全件を読み、種類・緊急度・感情を判定します"),
+     ("色で優先度を見る", "赤＝緊急度が高い、黄＝中くらい、緑＝急ぎではない。赤から対応します"),
+     ("下書きを確認する", "下のリストを開くと返信の下書き。そのまま編集もできます")],
+    "「⚠️上長対応」が付いたものは、繰り返しの不具合や強い怒りなど、担当者だけで対応しないほうがよい案件です。",
+)
 
-if st.button("AIで仕分ける", type="primary"):
+uploaded = st.file_uploader("① 問い合わせのCSVファイル（任意。無ければサンプルを使います）", type="csv")
+df = pd.read_csv(uploaded if uploaded else CSV_PATH)
+st.caption(f"読み込んだ問い合わせ：{len(df)}件" + ("" if uploaded else "（架空のサンプル）"))
+st.dataframe(df[["from", "subject", "body"]].rename(columns={"from": "送信者", "subject": "件名", "body": "本文"}),
+             width="stretch", hide_index=True, height=200)
+
+if st.button("② AIで仕分ける", type="primary"):
     results = []
     progress = st.progress(0.0)
     for n, row in enumerate(df.to_dict("records"), 1):
@@ -94,14 +109,35 @@ if (res := st.session_state.get("triage")) is not None:
     c3.metric("要エスカレーション", int(res.escalate.sum()))
     c4.metric("怒り・ネガティブ", int(res.sentiment.isin(["怒り", "ネガティブ"]).sum()))
 
-    left, right = st.columns([2, 1])
-    left.dataframe(res[["urgency", "category", "sentiment", "escalate", "summary", "from"]]
-                   .rename(columns={"urgency": "緊急度", "category": "分類", "sentiment": "感情",
-                                    "escalate": "要上長", "summary": "要約", "from": "送信者"}),
-                   width="stretch", hide_index=True)
-    right.bar_chart(res.category.value_counts())
+    section("③ 仕分け結果（緊急度の高い順）")
+    legend({"緊急度：高": URGENCY_COLORS["高"], "緊急度：中": URGENCY_COLORS["中"], "緊急度：低": URGENCY_COLORS["低"]})
+    table = res[["urgency", "category", "sentiment", "escalate", "summary", "from"]].rename(columns={
+        "urgency": "緊急度", "category": "分類", "sentiment": "感情", "escalate": "要上長", "summary": "要約", "from": "送信者"})
+    table["要上長"] = table["要上長"].map({True: "⚠️ 要", False: ""})
+    st.dataframe(color_by(table, "緊急度", URGENCY_COLORS), width="stretch", hide_index=True)
 
-    section("返信下書き（緊急度順）")
+    left, right = st.columns(2)
+    with left:
+        section("問い合わせの種類")
+        counts = res.category.value_counts().reset_index()
+        counts.columns = ["分類", "件数"]
+        st.altair_chart(alt.Chart(counts).mark_bar(cornerRadiusEnd=6).encode(
+            x=alt.X("件数:Q", axis=alt.Axis(tickMinStep=1)), y=alt.Y("分類:N", sort="-x", title=None),
+            color=alt.Color("分類:N", scale=alt.Scale(range=CATEGORY_COLORS), legend=None),
+            tooltip=["分類", "件数"]).properties(height=220), width="stretch")
+    with right:
+        section("お客様の感情")
+        senti = res.sentiment.value_counts().reset_index()
+        senti.columns = ["感情", "件数"]
+        palette = {"怒り": "#F87171", "ネガティブ": "#F9A8D4", "中立": "#CBD5E1", "ポジティブ": "#4ADE80"}
+        st.altair_chart(alt.Chart(senti).mark_arc(innerRadius=55).encode(
+            theta="件数:Q",
+            color=alt.Color("感情:N", scale=alt.Scale(domain=list(palette), range=list(palette.values()))),
+            tooltip=["感情", "件数"]).properties(height=220), width="stretch")
+
+    customizable()
+
+    section("④ 返信の下書き（押すと開きます）")
     for r in res.itertuples():
         badge = "🔴" if r.urgency == "高" else "🟡" if r.urgency == "中" else "🟢"
         with st.expander(f"{badge} [{r.category}] {r.subject} — {r.summary}" + ("　⚠️上長対応" if r.escalate else "")):

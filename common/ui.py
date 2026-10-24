@@ -73,6 +73,24 @@ html, body, [class*="css"], .stMarkdown, .stButton button, input, textarea {
 /* 表・エキスパンダー */
 [data-testid="stDataFrame"], [data-testid="stExpander"] { border-radius: 14px; overflow: hidden; }
 .note { font-size: .76rem; color: #8A94A6; margin-top: 2rem; }
+
+/* 使い方ガイド */
+.guide { background: #fff; border: 1px solid #E6EAF0; border-radius: 18px; padding: 1.2rem 1.4rem; margin-bottom: 1.4rem; }
+.guide .what { font-size: .95rem; color: #1B2433; line-height: 1.8; margin-bottom: 1rem; }
+.guide .what b { color: #0E7C74; }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .7rem; }
+.step { background: #F4F8FB; border-radius: 12px; padding: .8rem .9rem; position: relative; }
+.step .n { display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem;
+           border-radius: 50%; background: #0E9F8E; color: #fff; font-weight: 800; font-size: .8rem; margin-bottom: .4rem; }
+.step .t { font-weight: 700; font-size: .88rem; color: #0F1B2D; }
+.step .d { font-size: .78rem; color: #5B6577; line-height: 1.6; margin-top: .2rem; }
+.tip { margin-top: .9rem; font-size: .8rem; color: #8A5A00; background: #FFF8E6; border-radius: 10px; padding: .55rem .8rem; }
+a.card-link { display: block; text-decoration: none !important; color: inherit !important; height: 100%; }
+a.card-link .card { cursor: pointer; }
+a.card-link:hover .card { border-color: #14B8A6; }
+.card .go { margin-top: .7rem; font-size: .84rem; font-weight: 700; color: #13315C; }
+.custom { font-size: .78rem; color: #0E7C74; background: #ECFDF8; border-radius: 10px; padding: .5rem .8rem; margin: .8rem 0; }
+.legend span { display: inline-block; font-size: .74rem; padding: .15rem .6rem; border-radius: 6px; margin-right: .35rem; color: #334155; }
 </style>
 """
 
@@ -100,3 +118,39 @@ def section(text: str):
 
 def note(text: str):
     st.markdown(f'<div class="note">{html.escape(text)}</div>', unsafe_allow_html=True)
+
+
+# 表の色分けに使う色（薄い色にして文字を読みやすく）
+RED, YELLOW, GREEN, BLUE, GRAY = "#FDE2E2", "#FFF4CC", "#DFF5E8", "#E0ECFF", "#F1F5F9"
+URGENCY_COLORS = {"高": RED, "中": YELLOW, "低": GREEN}
+PRIORITY_COLORS = {"Must": RED, "Should": YELLOW, "Could": GREEN}
+SENTIMENT_COLORS = {"怒り": RED, "ネガティブ": "#FCE7F3", "中立": GRAY, "ポジティブ": GREEN}
+
+
+def guide(what: str, steps: list[tuple[str, str]], tip: str = ""):
+    """「何ができるか」と「使い方の手順」を表示する"""
+    items = "".join(f'<div class="step"><div class="n">{i}</div><div class="t">{html.escape(t)}</div>'
+                    f'<div class="d">{html.escape(d)}</div></div>' for i, (t, d) in enumerate(steps, 1))
+    tip_html = f'<div class="tip">💡 {html.escape(tip)}</div>' if tip else ""
+    st.markdown(f'<div class="guide"><div class="what">{what}</div><div class="steps">{items}</div>{tip_html}</div>',
+                unsafe_allow_html=True)
+
+
+def legend(colors: dict[str, str]):
+    """色の凡例"""
+    st.markdown('<div class="legend">' + "".join(
+        f'<span style="background:{c}">{html.escape(k)}</span>' for k, c in colors.items()) + "</div>",
+        unsafe_allow_html=True)
+
+
+def color_by(df, column: str, colors: dict[str, str]):
+    """column の値に応じて行全体に背景色を付ける（pandas Styler を返す）"""
+    def paint(row):
+        return [f"background-color: {colors.get(row[column], '')}"] * len(row)
+    return df.style.apply(paint, axis=1)
+
+
+def customizable():
+    """カスタマイズできることの注記"""
+    st.markdown('<div class="custom">🎨 表やグラフの幅、フォント、色、配置はカスタマイズ可能です。</div>',
+                unsafe_allow_html=True)

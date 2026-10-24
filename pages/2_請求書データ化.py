@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from common.llm import ask, is_demo
-from common.ui import hero, section, setup
+from common.ui import customizable, GREEN, RED, color_by, guide, hero, legend, section, setup
 
 SAMPLE_DIR = Path(__file__).parent.parent / "data" / "invoices"
 
@@ -105,12 +105,25 @@ hero("DEMO 02 · 経理", "請求書データ化",
      "PDF・画像・テキストの請求書から項目を読み取り、<b>金額の検算</b>と<b>インボイス要件チェック</b>を行ってExcelに出力します。",
      ['PDF / 画像読み取り', '構造化出力', 'プログラム検算', 'Excel出力'])
 
+guide(
+    "取引先から届く請求書は、会社ごとに形式がバラバラです。このツールは請求書を読み込むと、"
+    "<b>会社名・金額・支払期限などを自動で読み取って一覧表にします</b>。さらに"
+    "<b>金額の計算が合っているか</b>や<b>インボイス制度に必要な記載があるか</b>もチェックし、"
+    "問題がある請求書には印を付けます。経理の手入力と確認の手間を減らせます。",
+    [("請求書を用意する", "PDFや写真をアップロード。試すだけなら「サンプル請求書を使う」にチェックしたままでOK"),
+     ("「読み取る」を押す", "AIが1枚ずつ内容を読み取り、プログラムが金額を検算します"),
+     ("結果を確認する", "赤い行は要確認の請求書。理由が下に表示されます"),
+     ("Excelで受け取る", "「Excelでダウンロード」で一覧表と明細をまとめて保存できます")],
+    "サンプルの3件目（やまだ弁当）は、わざと登録番号が無い請求書にしてあります。赤く表示されるのを確認してみてください。",
+)
+
 files = [(f.name, f.getvalue()) for f in st.file_uploader(
-    "請求書をアップロード（複数可）", type=["pdf", "png", "jpg", "jpeg", "webp", "txt"], accept_multiple_files=True) or []]
-if st.checkbox("サンプル請求書3件を使う", value=not files):
+    "① 請求書をアップロード（複数可・PDF / 画像 / テキスト）", type=["pdf", "png", "jpg", "jpeg", "webp", "txt"],
+    accept_multiple_files=True) or []]
+if st.checkbox("サンプル請求書3件を使う（架空の請求書です）", value=not files):
     files += [(p.name, p.read_bytes()) for p in sorted(SAMPLE_DIR.glob("*.txt"))]
 
-if files and st.button(f"{len(files)}件を読み取る", type="primary"):
+if files and st.button(f"② {len(files)}件の請求書を読み取る", type="primary"):
     rows = []
     progress = st.progress(0.0)
     for n, (name, data) in enumerate(files, 1):
@@ -138,15 +151,24 @@ if rows := st.session_state.get("invoices"):
         "小計": r["subtotal"], "消費税": r["tax"], "合計": r["total"], "振込先": r["bank"],
         "要確認事項": " / ".join(r["invoice_issues"] + r["検算エラー"]),
     } for r in rows])
-    st.dataframe(table, width="stretch", hide_index=True)
+    table["状態"] = ["要確認" if x else "OK" for x in table["要確認事項"]]
+    table = table[["状態"] + [c for c in table.columns if c != "状態"]]
+
+    section("③ 読み取り結果")
+    legend({"要確認（問題あり）": RED, "OK（問題なし）": GREEN})
+    st.dataframe(color_by(table, "状態", {"要確認": RED, "OK": GREEN})
+                 .format({"小計": "¥{:,}", "消費税": "¥{:,}", "合計": "¥{:,}"}),
+                 width="stretch", hide_index=True)
 
     for r in needs_review:
         st.warning(f"**{r['vendor']}**（{r['ファイル']}）\n\n" + "\n".join(f"- {x}" for x in r["invoice_issues"] + r["検算エラー"]))
+
+    customizable()
 
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         table.to_excel(writer, sheet_name="請求書一覧", index=False)
         pd.DataFrame([{"ファイル": r["ファイル"], "発行元": r["vendor"], **i} for r in rows for i in r["items"]]) \
             .rename(columns={"name": "品目", "amount": "金額"}).to_excel(writer, sheet_name="明細", index=False)
-    st.download_button("Excelでダウンロード", buf.getvalue(), "請求書一覧.xlsx",
+    st.download_button("④ Excelでダウンロード", buf.getvalue(), "請求書一覧.xlsx",
                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

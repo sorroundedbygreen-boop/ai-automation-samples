@@ -10,7 +10,7 @@ from pathlib import Path
 import streamlit as st
 
 from common.llm import ask, is_demo
-from common.ui import hero, section, setup
+from common.ui import guide, hero, section, setup
 
 RULES_DIR = Path(__file__).parent.parent / "data" / "rules"
 TOP_K = 3
@@ -58,26 +58,41 @@ hero("DEMO 01 · 総務・人事", "社内規程Q&Aボット",
      "就業規則・経費精算規程・情報セキュリティ規程を検索し、<b>根拠の条文つき</b>で回答します。規程に書かれていないことは推測せず、担当部署へ案内します。",
      ['RAG（検索拡張生成）', '出典の明示', 'ハルシネーション対策'])
 
+guide(
+    "会社のルール（就業規則・経費のルールなど）について、社員がチャットで質問すると、"
+    "AIが<b>ルールの文書を調べて答えます</b>。答えには<b>どの規程の何条に書いてあるか</b>が必ず付くので、"
+    "本当に書いてあるか確認できます。総務や人事の「同じ質問に何度も答える」手間を減らせます。",
+    [("質問を選ぶ", "下の「質問の例」のボタンを押すか、画面下の入力欄に自由に質問を書きます"),
+     ("AIが規程を調べる", "質問に関係する条文を探し、その内容だけを使って回答を作ります"),
+     ("根拠を確認する", "回答の最後の「出典」や「見つかった条文」で、元のルールを確認できます")],
+    "規程に書かれていないことを聞くと、AIは推測で答えず「総務部へお問い合わせください」と案内します。",
+)
+
 chunks = load_chunks()
-with st.expander(f"読み込んだ規程（{len(chunks)}条）"):
+with st.expander(f"📄 AIが読み込んでいる規程（{len(chunks)}条）を見る"):
     for c in chunks:
         st.markdown(f"**{c['doc']} {c['title']}**  \n{c['body']}")
 
 if "history" not in st.session_state:
     st.session_state.history = []
 
-st.write("質問例：「在宅勤務は週何日まで？」「タクシーは使える？」「ChatGPTに顧客情報を入れていい？」")
+section("質問の例（押すとすぐ質問できます）")
+EXAMPLES = ["在宅勤務は週何日まで？", "タクシーは使える？", "ChatGPTに顧客情報を入れていい？"]
+picked = None
+for col, ex in zip(st.columns(len(EXAMPLES)), EXAMPLES):
+    if col.button(ex, width="stretch"):
+        picked = ex
 
 for role, text in st.session_state.history:
     st.chat_message(role).markdown(text)
 
-if question := st.chat_input("規程について質問してください"):
+if question := (st.chat_input("規程について質問してください（例：有給休暇は何日？）") or picked):
     st.chat_message("user").markdown(question)
     hits = search(question, chunks)
 
     if DEMO:
         key = next((k for k in DEMO_ANSWERS if k in question or (k == "AI" and "GPT" in question)), None)
-        answer = DEMO_ANSWERS.get(key, "（デモモード）この質問のサンプル回答は未登録です。APIキーを設定すると実際にAIが回答します。")
+        answer = DEMO_ANSWERS.get(key, "（デモモード）この質問のサンプル回答は未登録です。上の「質問の例」のボタンを試してください。")
     elif not hits:
         answer = "関連する規程が見つかりませんでした。総務部へお問い合わせください。"
     else:
@@ -88,7 +103,7 @@ if question := st.chat_input("規程について質問してください"):
     with st.chat_message("assistant"):
         st.markdown(answer)
         if hits:
-            with st.expander("検索でヒットした条文"):
+            with st.expander("🔍 AIが見つけた関連条文"):
                 for c in hits:
                     st.markdown(f"- **{c['doc']} {c['title']}**：{c['body'][:80]}…")
 
